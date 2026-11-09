@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}Analytics & Reports{% endblock %}{% block content %}
+<h4 class="mb-3">Analytics &amp; reports</h4>
+<div class="card-tm mb-4"><div class="card-header">Analysis history</div><div class="table-responsive"><table class="table align-middle mb-0">
+<thead><tr><th>#</th><th>Name</th><th>Created</th><th>Roads</th><th>Mean load</th><th>Frames</th><th class="text-end">Actions</th></tr></thead><tbody>
+{% for s in sessions %}<tr id="s{{ s.id }}" class="{{ 'table-info' if s.id==sid }}"><td>{{ s.id }}</td><td>{{ s.name }}</td><td>{{ s.created_at }}</td><td>{{ s.done_count }}/{{ s.road_count }}</td>
+<td>{{ s.mean_pcu|pcu }} PCU</td><td>{{ s.frames }}</td><td class="text-end text-nowrap">
+<a class="btn btn-sm btn-outline-primary" href="{{ url_for('reports_page', session=s.id) }}">View</a>
+<a class="btn btn-sm btn-outline-success" href="{{ url_for('report_pdf', sid=s.id) }}">PDF</a>
+<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('report_csv', sid=s.id) }}">CSV</a>
+<button class="btn btn-sm btn-outline-danger" onclick="del({{ s.id }})">Delete</button></td></tr>
+{% else %}<tr><td colspan="7" class="text-center text-muted py-4">No records yet.</td></tr>{% endfor %}</tbody></table></div></div>
+{% if sid %}<div class="row g-3">
+  {% for kind,title in [('timeline','Traffic load over time'),('density','Average density per road'),('classes','Vehicle categories'),('prediction','Current vs predicted'),('signals','Fixed vs adaptive green time')] %}
+  <div class="col-lg-6"><div class="card-tm"><div class="card-header">{{ title }}</div><div class="card-body"><img class="chart-img" src="{{ url_for('chart', sid=sid, kind=kind) }}"></div></div></div>{% endfor %}
+  <div class="col-lg-6"><div class="card-tm"><div class="card-header">Peak-traffic snapshots</div><div class="card-body" id="snaps"></div></div></div>
+</div>{% endif %}{% endblock %}
+{% block scripts %}<script>
+async function del(id) {
+  if (!confirm('Delete session #' + id + ' and its data?')) return;
+  try { await getJSON(`/api/session/${id}/delete`, {method: 'POST'}); location = '/reports'; } catch (e) { alert(e.message); }
+}
+{% if sid %}getJSON('/api/session/{{ sid }}/overview').then(ov => {
+  $('#snaps').innerHTML = ov.roads.filter(r => r.snapshot).map(r => `<div class="mb-2"><div class="small-muted">${r.name} road – peak frame (${r.peak.level})</div><img class="chart-img" src="/snapshot/${r.id}"></div>`).join('') || '<span class="small-muted">Snapshots appear after processing completes.</span>';
+});{% endif %}
+</script>{% endblock %}

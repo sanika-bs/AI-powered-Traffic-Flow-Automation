@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Traffic Density{% endblock %}{% block content %}
+<h4 class="mb-1">Traffic density analysis</h4>
+<p class="small-muted">Load is measured in passenger-car units (car 1.0 · motorcycle 0.5 · bus/truck 2.5 · bicycle 0.3). <b>Low</b> ≤ {{ cfg.LOW_MAX_PCU }} PCU · <b>Medium</b> ≤ {{ cfg.MEDIUM_MAX_PCU }} PCU · <b>High</b> above.</p>
+{% if not sid %}<div class="card-tm p-5 text-center">No analysis yet. <a href="{{ url_for('upload') }}">Upload a video</a>.</div>{% else %}
+<div class="row g-3 mb-3" id="cards"></div>
+<div class="row g-3">
+  <div class="col-lg-6"><div class="card-tm"><div class="card-header">Average density per road</div><div class="card-body"><img class="chart-img ch" data-src="{{ url_for('chart', sid=sid, kind='density') }}"></div></div></div>
+  <div class="col-lg-6"><div class="card-tm"><div class="card-header">Vehicle categories</div><div class="card-body"><img class="chart-img ch" data-src="{{ url_for('chart', sid=sid, kind='classes') }}"></div></div></div>
+  <div class="col-12"><div class="card-tm"><div class="card-header">Load over time (dashed lines = Medium / High thresholds)</div><div class="card-body"><img class="chart-img ch" data-src="{{ url_for('chart', sid=sid, kind='timeline') }}"></div></div></div>
+</div>{% endif %}{% endblock %}
+{% block scripts %}{% if sid %}<script>
+pollSession({{ sid }}, ov => {
+  $('#cards').innerHTML = ov.roads.map(r => `<div class="col-md-6 col-xl-3"><div class="card-tm kpi h-100">
+    <div class="d-flex justify-content-between"><div class="label">${r.name} road</div>${statusBadge(r.status)}</div>
+    <div class="value">${r.now.total} <small class="fs-6 text-muted">vehicles</small></div>
+    <div class="my-2">${badge(r.now.level)} <span class="small-muted ms-1">${r.now.pcu} PCU</span></div>${gauge(r.now.percent, r.now.level)}
+    <div class="sub mt-2">Peak: ${badge(r.peak.level)} ${r.peak.pcu} PCU</div>
+    <div class="sub">${Object.entries(r.now.counts).map(([k, v]) => `${k}: ${v}`).join(' · ')}</div></div></div>`).join('');
+  autoRefreshCharts(ov, '.ch');
+});
+</script>{% endif %}{% endblock %}

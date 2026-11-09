@@ -1,0 +1,51 @@
+{% extends "base.html" %}{% block title %}Dashboard{% endblock %}{% block content %}
+{% if not sid %}<div class="card-tm p-5 text-center">No analysis yet. <a href="{{ url_for('upload') }}">Upload a video</a>.</div>{% else %}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3"><div class="card-tm kpi"><div class="label">Vehicles in view (all roads)</div><div class="value" id="k-view">–</div><div class="sub" id="k-unique">–</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-tm kpi"><div class="label">Current traffic density</div><div class="value" id="k-level">–</div><div class="sub" id="k-pcu">–</div><div id="k-gauge"></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-tm kpi"><div class="label">Predicted congestion</div><div class="value" id="k-pred">–</div><div class="sub" id="k-pred-sub">–</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-tm kpi"><div class="label">Signal cycle</div><div class="value" id="k-cycle">–</div><div class="sub" id="k-plan-sub">needs ≥ 2 roads</div></div></div>
+</div>
+<div class="card-tm mb-3"><div class="card-header">Vehicle categories (in view)</div><div class="card-body"><div class="row g-2" id="classes"></div></div></div>
+<div class="row g-3 mb-3" id="roads"></div>
+<div class="row g-3">
+  <div class="col-lg-5"><div class="card-tm h-100"><div class="card-header">Recommended signal timings <span id="prov" class="badge text-bg-warning ms-1 d-none">provisional</span></div><div class="card-body" id="plan"></div></div></div>
+  <div class="col-lg-7"><div class="card-tm h-100"><div class="card-header">Traffic load over time</div><div class="card-body"><img class="chart-img dash-chart" data-src="{{ url_for('chart', sid=sid, kind='timeline') }}"></div></div></div>
+  <div class="col-lg-6"><div class="card-tm"><div class="card-header">Density per road</div><div class="card-body"><img class="chart-img dash-chart" data-src="{{ url_for('chart', sid=sid, kind='density') }}"></div></div></div>
+  <div class="col-lg-6"><div class="card-tm"><div class="card-header">Green time: fixed vs adaptive</div><div class="card-body"><img class="chart-img dash-chart" data-src="{{ url_for('chart', sid=sid, kind='signals') }}"></div></div></div>
+</div>
+{% endif %}{% endblock %}
+{% block scripts %}{% if sid %}<script>
+const built = {};
+function roadCard(r) {
+  if (!built[r.id]) {
+    built[r.id] = true;
+    $('#roads').insertAdjacentHTML('beforeend', `<div class="col-lg-6"><div class="card-tm" id="rc-${r.id}">
+      <div class="card-header d-flex justify-content-between"><span>${r.name} road <span class="small-muted">${r.filename && r.filename !== 'webcam' ? '' : ''}</span></span><span class="st"></span></div>
+      <div class="card-body"><img class="feed mb-2" src="/stream/road/${r.id}" alt="processed video">
+      <div class="progress mb-2" style="height:6px"><div class="progress-bar pg" style="width:0"></div></div>
+      <div class="d-flex justify-content-between align-items-center"><div class="info"></div><div class="lv"></div></div><div class="err text-danger small mt-1"></div></div></div></div>`);
+  }
+  const c = $('#rc-' + r.id);
+  c.querySelector('.st').innerHTML = statusBadge(r.status);
+  c.querySelector('.pg').style.width = r.progress + '%';
+  c.querySelector('.info').innerHTML = `<b>${r.now.total}</b> vehicles · ${r.now.pcu} PCU` + (r.status === 'completed' ? ' <span class="small-muted">(average)</span>' : '');
+  c.querySelector('.lv').innerHTML = badge(r.now.level);
+  c.querySelector('.err').textContent = r.error || '';
+}
+pollSession({{ sid }}, ov => {
+  ov.roads.forEach(roadCard);
+  const t = ov.totals;
+  $('#k-view').textContent = t.vehicles_in_view;
+  $('#k-unique').textContent = ov.roads.some(r => r.unique.total) ? `${t.unique_vehicles} unique vehicles tracked` : (ov.active ? 'tracking…' : 'tracking unavailable');
+  $('#k-level').innerHTML = badge(t.level); $('#k-pcu').textContent = `${t.mean_pcu} PCU mean load`; $('#k-gauge').innerHTML = gauge(t.percent, t.level);
+  const preds = ov.roads.filter(r => r.prediction && r.frames).map(r => r.prediction);
+  if (preds.length) { const w = levelFromWorst(preds.map(p => p.level)); $('#k-pred').innerHTML = badge(w);
+    $('#k-pred-sub').textContent = `worst road, next ~${preds[0].horizon_seconds}s (${preds.filter(p=>p.trend==='Rising').length} rising)`; }
+  $('#classes').innerHTML = Object.entries(t.class_counts).map(([k, v]) => `<div class="col"><div class="tile"><b>${v}</b><span>${k}</span></div></div>`).join('');
+  if (ov.plan) { $('#k-cycle').textContent = ov.plan.cycle + 's'; $('#k-plan-sub').textContent = `${ov.plan.reduction_pct}% est. wait reduction`; }
+  $('#prov').classList.toggle('d-none', !ov.plan_provisional);
+  renderPlanTable(ov.plan, $('#plan'));
+  autoRefreshCharts(ov, '.dash-chart');
+});
+</script>{% endif %}{% endblock %}

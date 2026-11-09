@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% block title %}Live Detection{% endblock %}{% block content %}
+<h4 class="mb-1">Live vehicle detection (webcam)</h4>
+<p class="small-muted">Uses a webcam attached to the computer running the server. Point it at a road (or a monitor playing a traffic video). Stopping saves the run to history.</p>
+<div class="row g-3">
+  <div class="col-lg-8"><div class="card-tm"><div class="card-body">
+    <div class="d-flex gap-2 align-items-center mb-3">
+      <label class="small-muted">Camera index</label><input id="cam" type="number" min="0" max="9" value="0" class="form-control form-control-sm" style="width:80px">
+      <button id="start" class="btn btn-success btn-sm">Start</button><button id="stop" class="btn btn-danger btn-sm" disabled>Stop &amp; save</button>
+      <span id="msg" class="small ms-2"></span></div>
+    <img id="feed" class="feed" alt="Live feed (press Start)"></div></div></div>
+  <div class="col-lg-4">
+    <div class="card-tm kpi mb-3"><div class="label">Vehicles in view</div><div class="value" id="n">–</div><div id="lv" class="mt-1"></div><div class="mt-2" id="g"></div><div class="sub mt-2" id="u"></div></div>
+    <div class="card-tm kpi mb-3"><div class="label">Predicted congestion</div><div class="value" id="p">–</div><div class="sub" id="ps"></div></div>
+    <div class="card-tm kpi"><div class="label">Categories</div><div class="row g-2 mt-1" id="cl"></div></div>
+  </div>
+</div>{% endblock %}
+{% block scripts %}<script>
+let poll = null;
+function startPoll() { poll = setInterval(async () => {
+  try { const s = await getJSON('/api/live/stats');
+    if (s.now) { $('#n').textContent = s.now.total; $('#lv').innerHTML = badge(s.now.level) + ` <span class="small-muted">${s.now.pcu} PCU</span>`; $('#g').innerHTML = gauge(s.now.percent, s.now.level);
+      $('#cl').innerHTML = Object.entries(s.now.counts).map(([k, v]) => `<div class="col-4"><div class="tile"><b>${v}</b><span>${k}</span></div></div>`).join(''); }
+    $('#u').textContent = s.unique ? `${s.unique} unique vehicles tracked` : '';
+    if (s.prediction) { $('#p').innerHTML = badge(s.prediction.level); $('#ps').textContent = `${s.prediction.trend} · ${s.prediction.method}`; }
+    if (!s.running) { stopUI(); if (s.error) msg(s.error, true); }
+  } catch (e) { console.error(e); } }, 1000); }
+function msg(t, bad) { $('#msg').textContent = t; $('#msg').className = 'small ms-2 ' + (bad ? 'text-danger' : 'text-success'); }
+function stopUI() { clearInterval(poll); $('#start').disabled = false; $('#stop').disabled = true; }
+$('#start').onclick = async () => {
+  msg('Starting… (first start loads the YOLO model)'); $('#start').disabled = true;
+  try { await getJSON('/api/live/start', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({camera: parseInt($('#cam').value, 10)})});
+    $('#feed').src = '/live_feed?' + Date.now(); $('#stop').disabled = false; msg('Running'); startPoll(); }
+  catch (e) { msg(e.message, true); $('#start').disabled = false; } };
+$('#stop').onclick = async () => {
+  try { const r = await getJSON('/api/live/stop', {method: 'POST'}); stopUI(); $('#feed').removeAttribute('src');
+    msg(r.session ? 'Saved to history as session #' + r.session : 'Stopped (too short to save)'); } catch (e) { msg(e.message, true); } };
+{% if running %}$('#feed').src = '/live_feed'; $('#start').disabled = true; $('#stop').disabled = false; startPoll();{% endif %}
+</script>{% endblock %}

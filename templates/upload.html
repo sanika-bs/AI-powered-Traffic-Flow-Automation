@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% block title %}Upload{% endblock %}{% block content %}
+<div class="card-tm p-4">
+  <h4>Upload traffic videos</h4>
+  <p class="small-muted">Upload a video for each approach road of a junction (at least one, ideally 2–4). Supported: {{ exts|join(', ') }} · max {{ max_mb }} MB in total.
+  Different roads are compared to decide how green time is shared.</p>
+  <form id="f" method="post" enctype="multipart/form-data">
+    <div class="mb-3"><label class="form-label">Session name</label><input class="form-control" name="session_name" maxlength="80" placeholder="e.g. Main Street junction – morning peak"></div>
+    <div class="row g-3">
+      {% for r in roads %}<div class="col-md-6"><div class="drop"><label class="form-label fw-semibold">{{ r }} road</label>
+        <input class="form-control vid" type="file" name="video_{{ r|lower }}" accept="video/*,.mkv"></div></div>{% endfor %}
+    </div>
+    <div id="err" class="text-danger mt-3"></div>
+    <button id="go" class="btn btn-primary btn-lg mt-3" type="submit">Start analysis</button>
+    <span id="wait" class="ms-3 text-muted d-none">Uploading… the dashboard opens automatically.</span>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+const exts = {{ exts|tojson }}, maxBytes = {{ max_mb }} * 1024 * 1024;
+$('#f').addEventListener('submit', e => {
+  const files = [...document.querySelectorAll('.vid')].map(i => i.files[0]).filter(Boolean);
+  let msg = '';
+  if (!files.length) msg = 'Please choose at least one video.';
+  else if (files.some(f => !exts.includes(f.name.split('.').pop().toLowerCase()))) msg = 'Unsupported file type. Use: ' + exts.join(', ');
+  else if (files.reduce((a, f) => a + f.size, 0) > maxBytes) msg = 'Total size exceeds the limit.';
+  $('#err').textContent = msg;
+  if (msg) return e.preventDefault();
+  $('#go').disabled = true; $('#wait').classList.remove('d-none');
+});
+</script>{% endblock %}

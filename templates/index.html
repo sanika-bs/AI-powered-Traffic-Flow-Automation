@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% block title %}Home{% endblock %}{% block content %}
+<div class="hero mb-4">
+  <h1 class="fw-bold">AI-Powered Traffic Flow Optimization</h1>
+  <p class="lead mb-3">Detect vehicles with YOLOv8, measure density, predict congestion and compute adaptive signal timings — demonstrated through a software simulation.</p>
+  <a class="btn btn-info me-2" href="{{ url_for('upload') }}">Upload traffic videos</a>
+  <a class="btn btn-outline-light me-2" href="{{ url_for('live_page') }}">Live webcam detection</a>
+  {% if sid %}<a class="btn btn-outline-light" href="{{ url_for('dashboard', session=sid) }}">Open latest dashboard</a>{% endif %}
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card-tm kpi"><div class="label">Analysis sessions</div><div class="value">{{ stats.sessions }}</div></div></div>
+  <div class="col-md-4"><div class="card-tm kpi"><div class="label">Unique vehicles tracked (recent)</div><div class="value">{{ stats.vehicles }}</div></div></div>
+  <div class="col-md-4"><div class="card-tm kpi"><div class="label">Frames analysed (recent)</div><div class="value">{{ stats.frames }}</div></div></div>
+</div>
+<h5 class="mb-3">System workflow</h5>
+<div class="row g-2 mb-4">
+  {% for s in ['Video input','Frame extraction','Preprocessing','YOLO detection','Vehicle counting','Density class','Congestion prediction','Adaptive signals','Dashboard & reports'] %}
+  <div class="col-6 col-md-4 col-lg"><div class="step"><i>{{ loop.index }}</i>{{ s }}</div></div>{% endfor %}
+</div>
+<div class="card-tm"><div class="card-header">Recent analyses</div>
+<div class="table-responsive"><table class="table align-middle mb-0">
+<thead><tr><th>#</th><th>Name</th><th>Created</th><th>Roads</th><th>Mean load</th><th></th></tr></thead><tbody>
+{% for s in sessions %}<tr><td>{{ s.id }}</td><td>{{ s.name }}</td><td>{{ s.created_at }}</td><td>{{ s.done_count }}/{{ s.road_count }} done</td>
+<td>{{ s.mean_pcu|pcu }} PCU</td><td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('dashboard', session=s.id) }}">Open</a></td></tr>
+{% else %}<tr><td colspan="6" class="text-center text-muted py-4">No analyses yet — upload your first traffic video.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

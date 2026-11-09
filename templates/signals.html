@@ -1,0 +1,61 @@
+{% extends "base.html" %}{% block title %}Signal Optimization{% endblock %}{% block content %}
+<h4 class="mb-1">Intelligent signal optimization <span class="badge text-bg-secondary fs-6">simulation</span></h4>
+<p class="small-muted">Green time is shared in proportion to the measured traffic load of each road. Every road is guaranteed at least {{ cfg.MIN_GREEN }} s and at most {{ cfg.MAX_GREEN }} s, so no road is starved. Nothing here controls real signals.</p>
+{% set demo = {'North':{'car':25,'bus':2,'truck':1,'motorcycle':8},'East':{'car':6},'South':{'car':12,'motorcycle':3},'West':{'car':2}} %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-5"><div class="card-tm h-100"><div class="card-header">Recommended plan from analysed video <span id="prov" class="badge text-bg-warning d-none">provisional</span></div>
+    <div class="card-body" id="plan"><span class="small-muted">{{ 'Loading…' if sid else 'No analysis yet.' }}</span></div></div></div>
+  <div class="col-lg-7"><div class="card-tm h-100"><div class="card-header">What-if simulator (enter vehicle counts per road)</div><div class="card-body">
+    <div class="table-responsive"><table class="table table-sm align-middle" id="whatif"><thead><tr><th>Road</th>
+      {% for c in ['car','motorcycle','bus','truck','bicycle'] %}<th>{{ c }}</th>{% endfor %}</tr></thead><tbody>
+      {% for r in roads %}<tr data-road="{{ r }}"><td><b>{{ r }}</b></td>
+      {% for c in ['car','motorcycle','bus','truck','bicycle'] %}<td><input type="number" min="0" max="500" value="{{ demo.get(r,{}).get(c,0) }}" class="form-control form-control-sm" data-c="{{ c }}" style="width:70px"></td>{% endfor %}</tr>{% endfor %}
+    </tbody></table></div>
+    <button class="btn btn-primary btn-sm" id="run">Compute plan</button> <span id="werr" class="text-danger small ms-2"></span>
+  </div></div></div>
+</div>
+<div class="card-tm mb-3"><div class="card-header d-flex justify-content-between align-items-center">Live signal simulation — fixed timing vs adaptive timing (same arriving traffic)
+  <div><select id="spd" class="form-select form-select-sm d-inline w-auto"><option value="1000">1×</option><option value="250" selected>4×</option><option value="100">10×</option></select>
+  <button id="sim-btn" class="btn btn-sm btn-success ms-1" disabled>Start</button></div></div>
+  <div class="card-body"><div class="row g-4">
+    <div class="col-lg-6"><h6>Fixed equal timing <span id="tq-fixed" class="badge text-bg-secondary"></span></h6><table class="table table-sm align-middle mb-0"><tbody id="sim-fixed"></tbody></table></div>
+    <div class="col-lg-6"><h6>Adaptive AI timing <span id="tq-ad" class="badge text-bg-success"></span></h6><table class="table table-sm align-middle mb-0"><tbody id="sim-ad"></tbody></table></div>
+  </div><div class="small-muted mt-2">Queue bars turn red when a queue gets long. Arrival rates come from the measured density (75% of capacity overall). Simplified model for demonstration.</div></div></div>
+<div class="card-tm"><div class="card-header">Green time per road</div><div class="card-body" id="chartbox">
+  {% if sid %}<img class="chart-img" style="max-width:640px" id="sigchart" data-src="{{ url_for('chart', sid=sid, kind='signals') }}">{% endif %}</div></div>
+{% endblock %}
+{% block scripts %}<script>
+let timer = null, sims = null;
+function setupSim(plan) {
+  clearInterval(timer); timer = null; $('#sim-btn').textContent = 'Start'; $('#sim-btn').disabled = false;
+  sims = [new QueueSim($('#sim-fixed'), plan, 'fixed'), new QueueSim($('#sim-ad'), plan, 'adaptive')];
+  sims.forEach(s => s.step());
+}
+function showPlan(plan, provisional) {
+  renderPlanTable(plan, $('#plan')); $('#prov').classList.toggle('d-none', !provisional);
+  if (plan) setupSim(plan);
+}
+$('#sim-btn').onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; $('#sim-btn').textContent = 'Start'; return; }
+  $('#sim-btn').textContent = 'Pause';
+  timer = setInterval(() => { sims.forEach(s => s.step());
+    $('#tq-fixed').textContent = 'total queue ' + Math.round(sims[0].totalQueue());
+    $('#tq-ad').textContent = 'total queue ' + Math.round(sims[1].totalQueue()); }, +$('#spd').value);
+};
+$('#spd').onchange = () => { if (timer) { $('#sim-btn').click(); $('#sim-btn').click(); } };
+$('#run').onclick = async () => {
+  $('#werr').textContent = '';
+  const roads = {};
+  document.querySelectorAll('#whatif tbody tr').forEach(tr => { roads[tr.dataset.road] = Object.fromEntries([...tr.querySelectorAll('input')].map(i => [i.dataset.c, parseInt(i.value || '0', 10)])); });
+  try { showPlan(await getJSON('/api/simulate', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({roads})}), false); }
+  catch (e) { $('#werr').textContent = e.message; }
+};
+{% if sid %}
+let shown = false;
+pollSession({{ sid }}, ov => {
+  if (ov.plan && (!shown || !ov.plan_provisional)) { showPlan(ov.plan, ov.plan_provisional); shown = !ov.plan_provisional; }
+  else if (!ov.plan) renderPlanTable(null, $('#plan'));
+  autoRefreshCharts(ov, '#sigchart');
+});
+{% else %}renderPlanTable(null, $('#plan'));{% endif %}
+</script>{% endblock %}

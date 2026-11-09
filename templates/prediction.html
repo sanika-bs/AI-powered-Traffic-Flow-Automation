@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block title %}Congestion Prediction{% endblock %}{% block content %}
+<h4 class="mb-1">Congestion prediction</h4>
+<p class="small-muted">Per-road traffic load is bucketed into 2-second steps. A Gradient-Boosting model trained on this and earlier recordings of the same road forecasts the load ~10 s ahead; with little data it falls back to a linear trend. The method used is shown on every card.</p>
+{% if not sid %}<div class="card-tm p-5 text-center">No analysis yet. <a href="{{ url_for('upload') }}">Upload a video</a>.</div>{% else %}
+<div class="row g-3 mb-3" id="cards"></div>
+<div class="row g-3">
+  <div class="col-lg-6"><div class="card-tm"><div class="card-header">Current vs predicted load</div><div class="card-body"><img class="chart-img ch" data-src="{{ url_for('chart', sid=sid, kind='prediction') }}"></div></div></div>
+  <div class="col-lg-6"><div class="card-tm"><div class="card-header">Historical load</div><div class="card-body"><img class="chart-img ch" data-src="{{ url_for('chart', sid=sid, kind='timeline') }}"></div></div></div>
+</div>{% endif %}{% endblock %}
+{% block scripts %}{% if sid %}<script>
+const arrow = {Rising: '▲', Falling: '▼', Stable: '▬'};
+pollSession({{ sid }}, ov => {
+  $('#cards').innerHTML = ov.roads.map(r => { const p = r.prediction;
+    if (!p || !r.frames) return `<div class="col-md-6 col-xl-3"><div class="card-tm kpi"><div class="label">${r.name} road</div><div class="sub">waiting for data… ${statusBadge(r.status)}</div></div></div>`;
+    return `<div class="col-md-6 col-xl-3"><div class="card-tm kpi h-100"><div class="label">${r.name} road · next ~${p.horizon_seconds}s</div>
+      <div class="value">${badge(p.level)}</div>
+      <div class="sub mt-1">Now ${p.current_pcu} → predicted <b>${p.predicted_pcu}</b> PCU</div>
+      <div class="my-2">${gauge(p.percent, p.level)}</div>
+      <div class="sub">Trend: <b>${arrow[p.trend]} ${p.trend}</b></div>
+      <div class="sub">Method: ${p.method}</div><div class="sub">Confidence: ${p.confidence}</div></div></div>`; }).join('');
+  autoRefreshCharts(ov, '.ch');
+});
+</script>{% endif %}{% endblock %}
